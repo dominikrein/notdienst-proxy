@@ -340,7 +340,7 @@ cp .env.example .env
 | `NOTDIENST_XML_URL` | XML-Schnittstelle (**Pflicht**, enthält Token) | – |
 | `NOTDIENST_BIND` | Bind-Adresse (`0.0.0.0` = im LAN erreichbar) | `127.0.0.1` |
 | `NOTDIENST_PORT` | HTTP-Port des Proxy | `8080` |
-| `NOTDIENST_FETCH_INTERVAL` | XML-Abruf-Intervall (s) | `600` |
+| `NOTDIENST_FETCH_INTERVAL` | XML-Abruf-Intervall (s) | `7200` |
 | `NOTDIENST_FETCH_RETRY` | Abruf-Intervall, solange noch keine Daten da sind (s) | `30` |
 | `NOTDIENST_PAGE_REFRESH` | Browser-Refresh (s) | `300` |
 | `NOTDIENST_MAX_ENTRIES` | Anzahl angezeigter Apotheken | `5` |
@@ -361,9 +361,10 @@ cp .env.example .env
 - Die letzte erfolgreiche Antwort wird auf Platte gecacht (`last_good.xml`) und
   übersteht Neustart und kurze Netzausfälle.
 - Ist der Abruf fehlgeschlagen, zeigt die Seite weiter den letzten gültigen
-  Stand samt „Stand: …"-Zeitstempel; ab 2 h Alter erscheint ein Warnhinweis.
+  Stand samt „Stand: …"-Zeitstempel; sind die Daten älter als zwei
+  Abruf-Intervalle (mind. 2 h), erscheint ein Warnhinweis.
 - Solange noch keine Daten vorliegen (Erststart, Reboot nach Stromausfall mit
-  leerem tmpfs-Cache), wird alle 30 s statt alle 10 min abgerufen – so kommt
+  leerem tmpfs-Cache), wird alle 30 s statt alle 2 h abgerufen – so kommt
   die Anzeige schnell und der healthz-gekoppelte Watchdog resettet nicht,
   während der Router nach einem Stromausfall noch hochfährt.
 - `/healthz` liefert `ok` (200) bzw. `no-data` (503) für Monitoring.

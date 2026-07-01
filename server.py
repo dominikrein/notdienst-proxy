@@ -69,16 +69,22 @@ BIND = os.environ.get("NOTDIENST_BIND", "127.0.0.1").strip()
 LOG_ENABLED = os.environ.get("NOTDIENST_LOG", "1").strip().lower() \
     not in ("0", "false", "no", "off", "")
 
-# Wie oft die XML frisch von sberg geholt wird (Sekunden)
-FETCH_INTERVAL = int(os.environ.get("NOTDIENST_FETCH_INTERVAL", "600"))  # 10 min
+# Wie oft die XML frisch von sberg geholt wird (Sekunden). Der Dienstplan
+# aendert sich nur taeglich - alle 2 h reicht und schont die Schnittstelle.
+FETCH_INTERVAL = int(os.environ.get("NOTDIENST_FETCH_INTERVAL", "7200"))  # 2 h
 
 # Schnell-Retry, solange noch KEINE Daten vorliegen (Sekunden). Wichtig nach
 # Stromausfall: der Cache liegt im Betrieb auf tmpfs (nach Reboot leer) und der
-# Router braucht oft laenger als der GENE. Mit dem normalen 600s-Intervall
+# Router braucht oft laenger als der GENE. Mit dem normalen Abruf-Intervall
 # wuerde der healthz-gekoppelte Watchdog (Grace 120s + 6x10s Fehlversuche +
 # 60s HW-Timeout ~ 4 min) die Kiste hart resetten, bevor der zweite Abruf
 # ueberhaupt drankommt -> Reset-Schleife, bis das Netz zufaellig steht.
 FETCH_RETRY_NODATA = int(os.environ.get("NOTDIENST_FETCH_RETRY", "30"))
+
+# Ab wann die Anzeige vor veralteten Daten warnt: zwei Abruf-Intervalle
+# (= mindestens ein Abruf fehlgeschlagen), aber nie unter 2 h. Bewusst
+# Ganzzahl-Arithmetik (siehe Float-Problem auf der Geode-VM).
+STALE_AFTER_H = max(2 * FETCH_INTERVAL, 7200) // 3600
 
 # Wie oft der Anzeige-Browser die Seite neu laedt (Sekunden, meta-refresh)
 PAGE_REFRESH = int(os.environ.get("NOTDIENST_PAGE_REFRESH", "300"))  # 5 min
@@ -459,10 +465,10 @@ def render_page():
     if fetched_at is not None:
         age = now - fetched_at
         stand = fetched_at.strftime("%d.%m.%Y %H:%M")
-        if age > dt.timedelta(hours=2):
+        if age > dt.timedelta(hours=STALE_AFTER_H):
             stale_note = ('<p class="stale">Achtung: Daten sind aelter als '
-                          '2 Stunden (Stand %s). Verbindung zum Server pruefen.</p>'
-                          % stand)
+                          '%d Stunden (Stand %s). Verbindung zum Server pruefen.</p>'
+                          % (STALE_AFTER_H, stand))
         std_line = "Stand: %s" % stand
     else:
         std_line = "Stand: unbekannt"
@@ -513,7 +519,7 @@ h2 { font-size:12px; color:#bb1e10; margin:4px 0 3px 0; }
 table.cardtbl { border-collapse:collapse; width:100%%; }
 table.cardtbl td { border:0; vertical-align:top; padding:0; }
 .name { font-size:19px; font-weight:bold; font-style:normal; color:#1a1a1a; }
-.adr  { font-size:14px; color:#555555; }
+.adr  { font-size:14px; color:#555555; margin:2px 0; }
 .tel  { font-size:18px; font-weight:bold; font-style:normal; color:#111111; }
 .cdist { text-align:right; width:132px; vertical-align:top; }
 .distnum { font-size:22px; font-weight:bold; font-style:normal; color:#bb1e10; white-space:nowrap; }

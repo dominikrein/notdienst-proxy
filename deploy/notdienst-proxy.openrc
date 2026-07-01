@@ -22,7 +22,7 @@ error_log="/dev/null"
 
 # Optional: Konfiguration hier setzen (sonst greifen die Defaults in server.py)
 export NOTDIENST_PORT="8080"
-export NOTDIENST_FETCH_INTERVAL="600"
+export NOTDIENST_FETCH_INTERVAL="7200"
 export NOTDIENST_PAGE_REFRESH="300"
 export NOTDIENST_MAX_ENTRIES="5"      # 6,5" 640x480 -> bis 5 Karten
 export NOTDIENST_TZ="Europe/Berlin"
