@@ -1,0 +1,49 @@
+#!/sbin/openrc-run
+# OpenRC-Dienst fuer den Notdienst-Proxy (Alpine Linux).
+# Installation:
+#   install -m755 deploy/notdienst-proxy.openrc /etc/init.d/notdienst-proxy
+#   rc-update add notdienst-proxy default
+#   rc-service notdienst-proxy start
+
+name="notdienst-proxy"
+description="Apotheken-Notdienst XML->HTML Proxy"
+
+: "${PROXY_DIR:=/opt/notdienst-proxy}"
+
+command="/usr/bin/python3"
+command_args="${PROXY_DIR}/server.py"
+command_background=true
+pidfile="/run/${RC_SVCNAME}.pid"
+# FLASH-SCHUTZ: NICHT nach /var/log (= CF/Flash) schreiben. Die Logdatei wuerde
+# sonst dauernd auf den Flash geschrieben und ihn verschleissen. Ausgabe daher
+# nach /dev/null; zusaetzlich ist das Logging im Proxy selbst aus (NOTDIENST_LOG=0).
+output_log="/dev/null"
+error_log="/dev/null"
+
+# Optional: Konfiguration hier setzen (sonst greifen die Defaults in server.py)
+export NOTDIENST_PORT="8080"
+export NOTDIENST_FETCH_INTERVAL="600"
+export NOTDIENST_PAGE_REFRESH="300"
+export NOTDIENST_MAX_ENTRIES="5"      # 6,5" 640x480 -> bis 5 Karten
+export NOTDIENST_TZ="Europe/Berlin"
+
+# FLASH-SCHUTZ (Stufe 1): keine wiederkehrenden Writes auf den Flash.
+# - Logging komplett aus (sonst schreibt der Proxy laufend Zeilen).
+# - Cache auf tmpfs (/run) statt neben server.py (= Flash). Der Proxy schreibt
+#   alle ~10 min die letzte gute XML; im RAM verschleisst das keinen Flash.
+#   Nachteil: Cache ueberlebt keinen Reboot - unkritisch, fetch_once() beim
+#   Start holt sofort frische Daten. /run ist auf Alpine immer tmpfs.
+export NOTDIENST_LOG="0"
+export NOTDIENST_CACHE_FILE="/run/notdienst-proxy/last_good.xml"
+
+depend() {
+    need net
+    after firewall
+}
+
+start_pre() {
+    checkpath --directory --mode 0755 /run
+    # Cache-Verzeichnis auf tmpfs anlegen (liegt in /run, wird bei Boot neu
+    # erzeugt). Der Proxy schreibt hier last_good.xml + last_good.xml.tmp.
+    checkpath --directory --mode 0755 /run/notdienst-proxy
+}

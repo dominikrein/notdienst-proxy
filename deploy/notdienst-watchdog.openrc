@@ -1,0 +1,43 @@
+#!/sbin/openrc-run
+# OpenRC-Dienst fuer den Hardware-Watchdog-Feeder (Alpine Linux).
+#
+# WICHTIG: bewusst OHNE supervise-daemon. Stirbt der Feeder, soll gerade KEIN
+# Neustart erfolgen, sondern der Hardware-Reset greifen (fail-safe). Ein
+# Neustart wuerde /dev/watchdog neu oeffnen und in der Schonzeit weiterfuettern
+# -> der beabsichtigte Reset bliebe aus.
+#
+# Installation via deploy/setup-watchdog.sh (kopiert Feeder + schreibt Config).
+
+name="notdienst-watchdog"
+description="Hardware-Watchdog-Feeder (gekoppelt an /healthz)"
+
+: "${CONF:=/etc/notdienst-watchdog.conf}"
+# shellcheck source=/dev/null
+[ -f "$CONF" ] && . "$CONF"
+
+command="/opt/notdienst-proxy/watchdog-feed.sh"
+command_background=true
+pidfile="/run/${RC_SVCNAME}.pid"
+# FLASH-SCHUTZ: keine Logs auf die CF.
+output_log="/dev/null"
+error_log="/dev/null"
+
+export WDT_DEV HEALTH_URL PET_INTERVAL FAIL_LIMIT GRACE
+
+depend() {
+    need net
+    after notdienst-proxy
+}
+
+start_pre() {
+    checkpath --directory --mode 0755 /run
+    # Modul laden (idempotent); Optionen (nowayout=1, timeout) kommen aus
+    # /etc/modprobe.d/notdienst-wdt.conf.
+    if [ -n "${WDT_MODULE:-}" ] && [ "${WDT_MODULE}" != "none" ]; then
+        modprobe "${WDT_MODULE}" 2>/dev/null || ewarn "modprobe ${WDT_MODULE} fehlgeschlagen"
+    fi
+    if [ ! -c "${WDT_DEV:-/dev/watchdog}" ]; then
+        eerror "kein ${WDT_DEV:-/dev/watchdog} - Watchdog-Modul fehlt"
+        return 1
+    fi
+}

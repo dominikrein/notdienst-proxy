@@ -1,0 +1,96 @@
+#!/bin/sh
+# X11-Kiosk (VESA) fuer die Notdienst-Anzeige auf dem GENE-5315 (Geode LX).
+# Wird von 'startx /opt/notdienst-proxy/xinitrc-kiosk' aufgerufen (aus kiosk.sh).
+#
+# KEIN Fenstermanager: matchbox & Co. sind in 3.18/x86 nicht paketiert, und wir
+# brauchen sie nicht. NetSurf oeffnet per Choices-Datei direkt in Panelgroesse
+# (640x480); ohne WM liegt das Fenster ohne Rahmen auf dem ganzen Schirm.
+# Auto-Aktualisierung macht NetSurf selbst ueber <meta refresh> der Proxy-Seite.
+
+# Bewusst 127.0.0.1 statt "localhost": der Proxy lauscht nur auf IPv4-Loopback.
+URL="http://127.0.0.1:8080/"
+
+# Bildschirmschoner / DPMS aus (Anzeige soll dauerhaft an sein).
+# Zweite Verteidigungslinie: die robuste Abschaltung steht in
+# /etc/X11/xorg.conf.d/10-noblank.conf (ServerFlags-Timeouts=0, Monitor DPMS
+# false), gesetzt von setup-kiosk.sh. Grund: der VESA-int10-Treiber weckt das
+# Panel nach DPMS-Off nicht wieder auf -> es bliebe sonst schwarz.
+xset s off
+xset s noblank
+xset -dpms
+
+# Panelaufloesung setzen (best effort; VESA meldet auf dem 6,5"-Panel meist
+# schon 640x480). Fehler ignorieren, falls der Modus fix ist.
+xrandr --output default --mode 640x480 2>/dev/null \
+    || xrandr -s 640x480 2>/dev/null || true
+
+# FLASH-SCHUTZ (Stufe 1): NetSurf-Config UND -Cache auf tmpfs (/run) legen.
+# NetSurf laedt die Seite per <meta refresh> alle paar Minuten neu und schreibt
+# dabei Cache/Cookies/URL-DB - das wuerde sonst laufend den Flash beschreiben.
+# NetSurf beachtet XDG_CONFIG_HOME/XDG_CACHE_HOME; beide auf /run (immer tmpfs).
+export XDG_CONFIG_HOME=/run/kiosk-cfg
+export XDG_CACHE_HOME=/run/kiosk-cache
+mkdir -p "$XDG_CACHE_HOME"
+
+# NetSurf-Fenster auf Panelgroesse vorgeben -> fuellt ohne WM den Schirm.
+CFG="$XDG_CONFIG_HOME/netsurf"
+mkdir -p "$CFG"
+cat > "$CFG/Choices" <<'EOF'
+window_width:640
+window_height:480
+window_x:0
+window_y:0
+# bar_show:none -> Toolbar UND Menueleiste komplett aus (kein url_bar, keine
+# Navigationsknoepfe, kein Throbber-Kreis, kein Zurueck-Pfeil). NetSurf liest das
+# in get_tool_bar_show()/get_bar_show(): nur "tool"/"menu/tool"/"menu" blenden
+# etwas ein, jeder andere Wert (hier "none") blendet alles aus.
+# WICHTIG: bar_show fasst NUR die Toolbar/Menueleiste an, NICHT die Layout-
+# Flaeche -> anders als der frueher versuchte tabcontents.ui-Patch (der die
+# Seite weiss machte) rendert die Seite hiermit normal. Statuszeile + Scroll-
+# balken haben KEINE Choices-Option - die verschwinden per GTK-CSS, s.u.
+bar_show:none
+EOF
+
+# Scrollbalken + Statuszeile ausblenden. NetSurf hat dafuer keine Option, aber
+# GTK3 laedt $XDG_CONFIG_HOME/gtk-3.0/gtk.css mit USER-Prioritaet (schlaegt
+# Theme). Entscheidend: die Widgets bleiben sichtbar/gemappt und werden nur auf
+# 0 Pixel kollabiert - anders als der visible=False-Patch in tabcontents.ui
+# (weisse Seite, s. build-netsurf.sh) behaelt die Layout-Flaeche so ihre volle
+# Groessenzuteilung und gewinnt die Pixel der Balken sogar dazu.
+mkdir -p "$XDG_CONFIG_HOME/gtk-3.0"
+cat > "$XDG_CONFIG_HOME/gtk-3.0/gtk.css" <<'EOF'
+/* Scrollbalken (vscrollbar rechts, hscrollbar unten) auf 0px kollabieren.
+   Seit GTK 3.20 kommen die Balkenbreiten aus CSS-min-width/min-height
+   (Alpine 3.18 hat GTK 3.24) -> 0 heisst wirklich 0. */
+scrollbar, scrollbar * {
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    border-width: 0;
+    opacity: 0;
+}
+
+/* Statuszeile: GtkLabel "status_text" im GtkPaned unten links (teilt sich die
+   Zeile mit dem hscrollbar). Per Builder-ID nicht ansprechbar, aber es ist das
+   einzige Label in einem Paned (Toolbar/Menue sind via bar_show:none weg).
+   font-size 1px drueckt die Zeilenhoehe auf ~0, opacity 0 macht den Rest
+   unsichtbar. */
+paned label {
+    opacity: 0;
+    font-size: 1px;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+}
+paned separator {
+    min-width: 0;
+    min-height: 0;
+    opacity: 0;
+}
+EOF
+
+# Mauszeiger ausblenden, falls unclutter installiert ist
+command -v unclutter >/dev/null 2>&1 && unclutter -idle 1 &
+
+exec netsurf-gtk3 "$URL"

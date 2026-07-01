@@ -1,0 +1,17 @@
+# Geheimnisse / lokale Konfiguration
+.env
+
+# Apotheken-A: eingetragene Marke, gehoert nicht ins oeffentliche Repo
+assets/apo-logo.png
+
+# Laufzeit-Cache und Logs
+last_good.xml
+last_good.xml.tmp
+*.log
+
+# Vorschau-Renders
+preview*.png
+
+# Python
+__pycache__/
+*.pyc
